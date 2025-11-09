@@ -90,44 +90,47 @@ public class JarHelper {
    * Unjars a given jar file into a given directory.
    */
   public void unjarDir(File jarFile, File destDir) throws IOException {
-    try (FileInputStream fis = new FileInputStream(jarFile)) {
-      unjar(fis, destDir);
-    }
+    FileInputStream fis = new FileInputStream(jarFile);
+    unjar(fis, destDir);
   }
 
   /**
    * Given an InputStream on a jar file, unjars the contents into the given directory.
    */
   public void unjar(InputStream in, File destDir) throws IOException {
-    try (JarInputStream jis = new JarInputStream(in)) {
-      JarEntry entry;
-      while ((entry = jis.getNextJarEntry()) != null) {
-        if (entry.isDirectory()) {
-          File dir = new File(destDir, entry.getName());
-          dir.mkdir();
-          if (entry.getTime() != -1) {
-            dir.setLastModified(entry.getTime());
-          }
-          continue;
-        }
-        int count;
-        byte[] data = new byte[BUFFER_SIZE];
-        File destFile = new File(destDir, entry.getName());
-        if (mVerbose) {
-          LOGGER.info("unjarring {} from {}", destFile, entry.getName());
-        }
-        try (FileOutputStream fos = new FileOutputStream(destFile);
-             BufferedOutputStream dest = new BufferedOutputStream(fos, BUFFER_SIZE)) {
-          while ((count = jis.read(data, 0, BUFFER_SIZE)) != -1) {
-            dest.write(data, 0, count);
-          }
-          dest.flush();
-        }
+    BufferedOutputStream dest = null;
+    JarInputStream jis = new JarInputStream(in);
+    JarEntry entry;
+    while ((entry = jis.getNextJarEntry()) != null) {
+      if (entry.isDirectory()) {
+        File dir = new File(destDir, entry.getName());
+        dir.mkdir();
         if (entry.getTime() != -1) {
-          destFile.setLastModified(entry.getTime());
+          dir.setLastModified(entry.getTime());
         }
+        continue;
+      }
+      int count;
+      byte[] data = new byte[BUFFER_SIZE];
+      File destFile = new File(destDir, entry.getName());
+      if (mVerbose) {
+        LOGGER.info("unjarring {} from {}", destFile, entry.getName());
+      }
+      FileOutputStream fos = new FileOutputStream(destFile);
+      dest = new BufferedOutputStream(fos, BUFFER_SIZE);
+      try {
+        while ((count = jis.read(data, 0, BUFFER_SIZE)) != -1) {
+          dest.write(data, 0, count);
+        }
+        dest.flush();
+      } finally {
+        dest.close();
+      }
+      if (entry.getTime() != -1) {
+        destFile.setLastModified(entry.getTime());
       }
     }
+    jis.close();
   }
 
   public void setVerbose(boolean b) {
