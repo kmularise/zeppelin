@@ -33,10 +33,142 @@ permissions:
   contents: read # to fetch code (actions/checkout)
 
 jobs:
+  # ============================================
+  # Prepare Docker Images
+  # ============================================
+  prepare-python-r-env:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-name: ${{ steps.image.outputs.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate image name with hash
+        id: image
+        run: |
+          ENV_HASH=$(sha256sum testing/env_python_3.9_with_R.yml | cut -d' ' -f1 | cut -c1-12)
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/zeppelin-test-env:py39-r-${ENV_HASH}"
+
+          echo "name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "📦 Image will be: ${IMAGE_NAME}"
+
+      - name: Check if image exists
+        id: check
+        run: |
+          if docker manifest inspect ${{ steps.image.outputs.name }} >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Image exists, skipping build"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Image does not exist, will build"
+          fi
+        continue-on-error: true
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.check.outputs.exists != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push if needed
+        if: steps.check.outputs.exists != 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: .github/docker/python-r-env.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}
+            ghcr.io/${{ github.repository_owner }}/zeppelin-test-env:py39-r-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            ENV_FILE=testing/env_python_3.9_with_R.yml
+
+  prepare-python-r-tensorflow-env:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-name: ${{ steps.image.outputs.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate image name with hash
+        id: image
+        run: |
+          ENV_HASH=$(sha256sum testing/env_python_3_with_R_and_tensorflow.yml | cut -d' ' -f1 | cut -c1-12)
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/zeppelin-test-env:py3-r-tf-${ENV_HASH}"
+
+          echo "name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "📦 Image will be: ${IMAGE_NAME}"
+
+      - name: Check if image exists
+        id: check
+        run: |
+          if docker manifest inspect ${{ steps.image.outputs.name }} >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Image exists, skipping build"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Image does not exist, will build"
+          fi
+        continue-on-error: true
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.check.outputs.exists != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push if needed
+        if: steps.check.outputs.exists != 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: .github/docker/python-r-tensorflow-env.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}
+            ghcr.io/${{ github.repository_owner }}/zeppelin-test-env:py3-r-tf-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            ENV_FILE=testing/env_python_3_with_R_and_tensorflow.yml
+
+  # ============================================
+  # Test Jobs
+  # ============================================
   # test on core-modules (zeppelin-interpreter,zeppelin-zengine,zeppelin-server),
   # some interpreters are included, because zeppelin-server test depends on them: spark, shell & markdown
   core-modules:
+    needs: prepare-python-r-env
     runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.prepare-python-r-env.outputs.image-name }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -46,11 +178,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Tune Runner VM
         uses: ./.github/actions/tune-runner-vm
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ matrix.java }}
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -67,27 +194,26 @@ jobs:
         run: ./mvnw install -Pbuild-distr -DskipTests -pl zeppelin-server,zeppelin-web,spark-submit,spark/scala-2.12,spark/scala-2.13,markdown,angular,shell -am -Pweb-classic -Phelium-dev -Pexamples ${MAVEN_ARGS}
       - name: install and test plugins
         run: ./mvnw package -pl zeppelin-plugins -amd ${MAVEN_ARGS}
-      - name: Setup conda environment with python 3.9 and R
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          activate-environment: python_3_with_R
-          environment-file: testing/env_python_3.9_with_R.yml
-          python-version: 3.9
-          channels: conda-forge,defaults
-          channel-priority: strict
-          auto-activate-base: false
-          use-mamba: true
-      - name: Make IRkernel available to Jupyter
+      - name: Verify environment
         run: |
-          R -e "IRkernel::installspec()"
-          conda list
+          echo "🐍 Python version:"
+          python --version
+          echo "📦 Conda info:"
           conda info
+          echo "📊 R version:"
+          R --version
       - name: run tests # skip spark test because we would run them in other CI
         run: ./mvnw verify -Pusing-packaged-distr -pl zeppelin-server,zeppelin-web,spark-submit,spark/scala-2.12,spark/scala-2.13,markdown,angular,shell -am -Pweb-classic -Phelium-dev -Pexamples -Dtests.to.exclude=**/org/apache/zeppelin/spark/* -DfailIfNoTests=false
 
   # test interpreter modules except spark, flink, python, rlang, jupyter
   interpreter-test-non-core:
+    needs: prepare-python-r-tensorflow-env
     runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.prepare-python-r-tensorflow-env.outputs.image-name }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -99,11 +225,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Tune Runner VM
         uses: ./.github/actions/tune-runner-vm
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ matrix.java }}
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -117,22 +238,18 @@ jobs:
             ${{ runner.os }}-zeppelin-
       - name: install environment
         run: ./mvnw install -DskipTests -am -pl ${INTERPRETERS} ${MAVEN_ARGS}
-      - name: Setup conda environment with python 3.9 and R
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          activate-environment: python_3_with_R_and_tensorflow
-          environment-file: testing/env_python_3_with_R_and_tensorflow.yml
-          python-version: 3.9
-          channels: conda-forge,defaults
-          channel-priority: strict
-          auto-activate-base: false
-          use-mamba: true
       - name: verify interpreter
         run: ./mvnw verify -am -pl ${INTERPRETERS} ${MAVEN_ARGS}
 
   # test interpreter modules for jupyter, python, rlang
   interpreter-test-jupyter-python-rlang:
+    needs: prepare-python-r-env
     runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.prepare-python-r-env.outputs.image-name }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -143,11 +260,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Tune Runner VM
         uses: ./.github/actions/tune-runner-vm
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ matrix.java }}
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -159,19 +271,6 @@ jobs:
           key: ${{ runner.os }}-zeppelin-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-zeppelin-
-      - name: Setup conda environment with python ${{ matrix.python }} and R
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          activate-environment: python_3_with_R
-          environment-file: testing/env_python_${{ matrix.python }}_with_R.yml
-          python-version: ${{ matrix.python }}
-          channels: conda-forge,defaults
-          channel-priority: strict
-          auto-activate-base: false
-          use-mamba: true
-      - name: Make IRkernel available to Jupyter
-        run: |
-          R -e "IRkernel::installspec()"
       - name: install environment
         run: |
           ./mvnw install -DskipTests -pl python,rlang,zeppelin-jupyter-interpreter -am ${MAVEN_ARGS}
@@ -181,7 +280,13 @@ jobs:
 
   # zeppelin integration test except Spark & Flink
   zeppelin-integration-test:
+    needs: prepare-python-r-env
     runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.prepare-python-r-env.outputs.image-name }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -194,11 +299,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Tune Runner VM
         uses: ./.github/actions/tune-runner-vm
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ matrix.java }}
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -214,19 +314,6 @@ jobs:
         run: |
           ./mvnw install -DskipTests -Pintegration -pl zeppelin-interpreter-integration,zeppelin-web,spark-submit,spark/scala-2.12,spark/scala-2.13,markdown,flink-cmd,flink/flink-scala-2.12,jdbc,shell -am -Pweb-classic -Pflink-117 ${MAVEN_ARGS}
           ./mvnw package -pl zeppelin-plugins -amd -DskipTests ${MAVEN_ARGS}
-      - name: Setup conda environment with python 3.9 and R
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          activate-environment: python_3_with_R
-          environment-file: testing/env_python_3_with_R.yml
-          python-version: 3.9
-          channels: conda-forge,defaults
-          channel-priority: strict
-          auto-activate-base: false
-          use-mamba: true
-      - name: Make IRkernel available to Jupyter
-        run: |
-          R -e "IRkernel::installspec()"
       - name: run tests
         run: ./mvnw test -pl zeppelin-interpreter-integration -Pintegration -DfailIfNoTests=false -Dtest=ZeppelinClientIntegrationTest,ZeppelinClientWithAuthIntegrationTest,ZSessionIntegrationTest,ShellIntegrationTest,JdbcIntegrationTest
       - name: Print zeppelin logs
@@ -288,7 +375,13 @@ jobs:
 
 
   spark-integration-test:
+    needs: prepare-python-r-env
     runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.prepare-python-r-env.outputs.image-name }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -298,11 +391,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Tune Runner VM
         uses: ./.github/actions/tune-runner-vm
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ matrix.java }}
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -318,25 +406,18 @@ jobs:
         run: |
           ./mvnw install -DskipTests -pl zeppelin-interpreter-integration,zeppelin-web,spark-submit,spark/scala-2.12,spark/scala-2.13,markdown -am -Pweb-classic -Pintegration ${MAVEN_ARGS}
           ./mvnw clean package -pl zeppelin-plugins -amd -DskipTests ${MAVEN_ARGS}
-      - name: Setup conda environment with python 3.9 and R
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          activate-environment: python_3_with_R
-          environment-file: testing/env_python_3_with_R.yml
-          python-version: 3.9
-          channels: conda-forge,defaults
-          channel-priority: strict
-          auto-activate-base: false
-          use-mamba: true
-      - name: Make IRkernel available to Jupyter
-        run: |
-          R -e "IRkernel::installspec()"
       - name: run tests
         run: ./mvnw test -pl zeppelin-interpreter-integration -Pintegration -Dtest=SparkSubmitIntegrationTest,ZeppelinSparkClusterTest32,SparkIntegrationTest32,ZeppelinSparkClusterTest33,SparkIntegrationTest33 -DfailIfNoTests=false ${MAVEN_ARGS}
 
   # test on spark for each spark version & scala version
   spark-test:
+    needs: prepare-python-r-env
     runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.prepare-python-r-env.outputs.image-name }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -347,11 +428,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Tune Runner VM
         uses: ./.github/actions/tune-runner-vm
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ matrix.java }}
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -365,19 +441,6 @@ jobs:
             ${{ runner.os }}-zeppelin-
       - name: install environment
         run: ./mvnw install -DskipTests -pl spark-submit,spark/scala-2.12,spark/scala-2.13 -am ${MAVEN_ARGS}
-      - name: Setup conda environment with python ${{ matrix.python }} and R
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          activate-environment: python_3_with_R
-          environment-file: testing/env_python_${{ matrix.python }}_with_R.yml
-          python-version: ${{ matrix.python }}
-          channels: conda-forge,defaults
-          channel-priority: strict
-          auto-activate-base: false
-          use-mamba: true
-      - name: Make IRkernel available to Jupyter
-        run: |
-          R -e "IRkernel::installspec()"
       - name: run spark-3.3 tests with scala-2.12 and python-${{ matrix.python }}
         if: ${{ matrix.java == 11 }}
         run: |
@@ -407,17 +470,18 @@ jobs:
   # Livy 0.8.0 tested with Spark 3.2
   # https://github.com/apache/incubator-livy/blob/v0.8.0-incubating/dev/docker/livy-dev-spark/Dockerfile#L20
   livy-0-8-with-spark-3-2-under-python39:
+    needs: prepare-python-r-env
     runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.prepare-python-r-env.outputs.image-name }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Tune Runner VM
         uses: ./.github/actions/tune-runner-vm
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: 11
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -434,19 +498,6 @@ jobs:
           ./mvnw install -DskipTests -pl livy -am ${MAVEN_ARGS}
           ./testing/downloadSpark.sh "3.2.4" "3.2"
           ./testing/downloadLivy.sh "0.8.0-incubating" "2.12"
-      - name: Setup conda environment with python 3.9 and R
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          activate-environment: python_39_with_R
-          environment-file: testing/env_python_3.9_with_R.yml
-          python-version: 3.9
-          channels: conda-forge,defaults
-          channel-priority: strict
-          auto-activate-base: false
-          use-mamba: true
-      - name: Make IRkernel available to Jupyter
-        run: |
-          R -e "IRkernel::installspec()"
       - name: run tests
         run: |
           export SPARK_HOME=$PWD/spark-3.2.4-bin-hadoop3.2
