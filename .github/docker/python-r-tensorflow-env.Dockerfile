@@ -15,6 +15,9 @@ RUN conda env create -f /tmp/environment.yml && \
     conda clean -afy && \
     rm /tmp/environment.yml
 
+# Install R IRkernel (system-wide for all users)
+RUN /opt/conda/envs/python_3_with_R_and_tensorflow/bin/R -e "IRkernel::installspec(user = FALSE)"
+
 # Install Java 11 for Maven
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
