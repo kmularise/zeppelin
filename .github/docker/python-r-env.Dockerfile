@@ -16,7 +16,8 @@ RUN conda env create -f /tmp/environment.yml && \
     rm /tmp/environment.yml
 
 # Install R IRkernel (system-wide for all users)
-RUN /opt/conda/envs/python_3_with_R/bin/R -e "IRkernel::installspec(user = FALSE)"
+# Need to activate conda environment so jupyter command is available in PATH
+RUN /bin/bash -c "source /opt/conda/bin/activate python_3_with_R && R -e \"IRkernel::installspec(user = FALSE)\""
 
 # Install Java 11 for Maven
 RUN apt-get update && \
