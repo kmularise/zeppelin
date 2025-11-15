@@ -7,12 +7,16 @@ ARG ENV_FILE=testing/env_python_3_with_R_and_tensorflow.yml
 LABEL org.opencontainers.image.source=https://github.com/apache/zeppelin
 LABEL org.opencontainers.image.description="Zeppelin test environment with Python 3, R and TensorFlow"
 
+# Install mamba for faster and more memory-efficient package installation
+RUN conda install -n base -c conda-forge mamba -y && \
+    conda clean -afy
+
 # Copy environment file
 COPY ${ENV_FILE} /tmp/environment.yml
 
-# Create conda environment (optimized in one layer)
-RUN conda env create -f /tmp/environment.yml && \
-    conda clean -afy && \
+# Create conda environment using mamba (faster and more memory efficient)
+RUN mamba env create -f /tmp/environment.yml && \
+    mamba clean -afy && \
     rm /tmp/environment.yml
 
 # Install R IRkernel (system-wide for all users)
@@ -27,6 +31,10 @@ RUN apt-get update && \
         curl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Initialize conda for bash shell (needed for GitHub Actions containers)
+RUN conda init bash && \
+    echo "conda activate python_3_with_R_and_tensorflow" >> ~/.bashrc
 
 # Set environment variables
 ENV PATH=/opt/conda/envs/python_3_with_R_and_tensorflow/bin:$PATH \
