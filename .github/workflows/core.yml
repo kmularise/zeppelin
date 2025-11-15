@@ -176,8 +176,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Tune Runner VM
-        uses: ./.github/actions/tune-runner-vm
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -223,8 +221,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Tune Runner VM
-        uses: ./.github/actions/tune-runner-vm
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -258,8 +254,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Tune Runner VM
-        uses: ./.github/actions/tune-runner-vm
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -293,12 +287,9 @@ jobs:
         java: [ 11 ]
     steps:
       # user/password => root/root
-      - name: Start mysql
-        run: sudo systemctl start mysql.service
+      # Note: systemd commands don't work in containers, MySQL setup may need adjustment
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Tune Runner VM
-        uses: ./.github/actions/tune-runner-vm
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -389,8 +380,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Tune Runner VM
-        uses: ./.github/actions/tune-runner-vm
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -426,8 +415,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Tune Runner VM
-        uses: ./.github/actions/tune-runner-vm
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -480,8 +467,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Tune Runner VM
-        uses: ./.github/actions/tune-runner-vm
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
