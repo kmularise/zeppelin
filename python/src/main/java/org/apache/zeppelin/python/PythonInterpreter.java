@@ -411,8 +411,14 @@ public class PythonInterpreter extends Interpreter {
 
   public void interrupt() throws IOException, InterpreterException {
     if (pythonPid > -1) {
+      // Validate PID to prevent command injection
+      if (pythonPid <= 0 || pythonPid > Integer.MAX_VALUE) {
+        throw new InterpreterException("Invalid PID: " + pythonPid);
+      }
       LOGGER.info("Sending SIGINT signal to PID : {}", pythonPid);
-      Runtime.getRuntime().exec("kill -SIGINT " + pythonPid);
+      // Use ProcessBuilder instead of Runtime.exec with string concatenation
+      ProcessBuilder pb = new ProcessBuilder("kill", "-SIGINT", String.valueOf(pythonPid));
+      pb.start();
     } else {
       LOGGER.warn("Non UNIX/Linux system, close the interpreter");
       close();

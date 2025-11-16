@@ -619,7 +619,9 @@ public abstract class FlinkSqlInterpreterTest {
 
   public File createORCFile(int[] values) throws IOException {
     File file = File.createTempFile("zeppelin-flink-input", ".orc");
-    file.delete();
+    if (!file.delete()) {
+      LOGGER.warn("Failed to delete temporary file: {}", file.getAbsolutePath());
+    }
     Path path = new Path(file.getAbsolutePath());
     Configuration conf = new Configuration();
     conf.set("orc.compress", "snappy");

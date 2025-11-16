@@ -406,9 +406,8 @@ public class PythonCondaInterpreter extends Interpreter {
     }
 
     public void run() {
-      try {
-        InputStreamReader isr = new InputStreamReader(is);
-        BufferedReader br = new BufferedReader(isr);
+      try (InputStreamReader isr = new InputStreamReader(is);
+           BufferedReader br = new BufferedReader(isr)) {
         String line = null;
         long startTime = System.currentTimeMillis();
         while ((line = br.readLine()) != null) {
@@ -420,7 +419,7 @@ public class PythonCondaInterpreter extends Interpreter {
           }
         }
       } catch (IOException ioe) {
-        ioe.printStackTrace();
+        LOGGER.error("Error reading input stream", ioe);
       }
     }
 

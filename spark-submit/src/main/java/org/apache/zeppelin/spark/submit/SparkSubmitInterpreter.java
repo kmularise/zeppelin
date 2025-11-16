@@ -126,6 +126,12 @@ public class SparkSubmitInterpreter extends ShellInterpreter {
     super.cancel(context);
     String yarnAppId = yarnAppIdMap.remove(context.getParagraphId());
     if (StringUtils.isNotBlank(yarnAppId)) {
+      // Validate YARN application ID format to prevent command injection
+      // Expected format: application_<timestamp>_<id>
+      if (!yarnAppId.matches("^application_\\d+_\\d+$")) {
+        LOGGER.error("Invalid YARN application ID format: {}", yarnAppId);
+        return;
+      }
       try {
         LOGGER.info("Try to kill yarn app: {} of code: {}", yarnAppId, context.getParagraphText());
         Runtime.getRuntime().exec(new String[]{"yarn", "application", "-kill", yarnAppId});

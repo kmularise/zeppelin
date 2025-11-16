@@ -223,10 +223,10 @@ public class AlluxioInterpreterTest {
 
   private void fileReadTest(String fileName, int size) throws IOException {
     File testFile = new File(PathUtils.concatPath(mLocalAlluxioCluster.getAlluxioHome(), fileName));
-    FileInputStream fis = new FileInputStream(testFile);
     byte[] read = new byte[size];
-    fis.read(read);
-    fis.close();
+    try (FileInputStream fis = new FileInputStream(testFile)) {
+      fis.read(read);
+    }
     assertTrue(BufferUtils.equalIncreasingByteArray(size, read));
   }
 }
