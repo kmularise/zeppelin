@@ -116,6 +116,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Fix git ownership in container
+        run: git config --global --add safe.directory /__w/zeppelin/zeppelin
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -195,6 +197,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Fix git ownership in container
+        run: git config --global --add safe.directory /__w/zeppelin/zeppelin
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -231,6 +235,8 @@ jobs:
       # Note: systemd commands don't work in containers, MySQL setup may need adjustment
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Fix git ownership in container
+        run: git config --global --add safe.directory /__w/zeppelin/zeppelin
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -321,6 +327,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Fix git ownership in container
+        run: git config --global --add safe.directory /__w/zeppelin/zeppelin
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -356,6 +364,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Fix git ownership in container
+        run: git config --global --add safe.directory /__w/zeppelin/zeppelin
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
@@ -408,6 +418,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Fix git ownership in container
+        run: git config --global --add safe.directory /__w/zeppelin/zeppelin
       - name: Cache local Maven repository
         uses: actions/cache@v4
         with:
